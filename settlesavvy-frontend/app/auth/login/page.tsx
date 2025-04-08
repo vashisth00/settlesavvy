@@ -24,7 +24,9 @@ export default function LoginPage() {
     setError('');
     
     try {
-      const response = await authService.login(username, password);
+      // Fix: Pass an object with username and password properties
+      const response = await authService.login({ username, password });
+      
       toast.success('Login successful!', {
         description: 'You have been logged in successfully.',
       });

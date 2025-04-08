@@ -59,6 +59,7 @@ export default function RegisterPage() {
       // Remove confirm_password before sending to API
       const { confirm_password, ...registrationData } = formData;
       
+      // This registrationData object already has the structure needed for the API call
       await authService.register(registrationData);
       
       toast.success('Registration successful!', {

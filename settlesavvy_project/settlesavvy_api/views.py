@@ -6,11 +6,15 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.shortcuts import get_object_or_404
-from django.contrib.gis.geos import Point
 import json
+import uuid
+from datetime import datetime
 
 from settlesavvy_accounts.models import User
-# Instead of importing from settlesavvy_core, import directly from your djando core model
+from .serializers import MapSerializer
+
+# In-memory storage for maps (temporary solution until we have a database model)
+MAPS = []
 
 # Custom login view
 @api_view(['POST'])
@@ -93,17 +97,90 @@ def register_view(request):
         }
     }, status=status.HTTP_201_CREATED)
 
-# Create a simple MapViewSet to respond to the API endpoint
+# Updated MapViewSet that supports POST (create) operations and stores maps in memory
 class MapViewSet(viewsets.ViewSet):
     """
-    A simple ViewSet for listing or retrieving maps.
+    A ViewSet for listing, retrieving, and creating maps.
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def list(self, request):
-        # Just return an empty list for now
-        return Response([])
+        # Return all maps from our in-memory storage
+        return Response(MAPS)
     
     def retrieve(self, request, pk=None):
-        # Return a 404 if the map doesn't exist
+        # Find the map with the given ID
+        for map_data in MAPS:
+            if map_data['map_id'] == pk:
+                return Response(map_data)
+        
+        # If no map is found, return 404
+        return Response({"error": "Map not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+    def create(self, request):
+        # Extract data from request
+        name = request.data.get('name')
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        zoom_level = request.data.get('zoom_level', 10)
+        
+        # Validate required fields
+        if not name:
+            return Response({"error": "Map name is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create a new map object
+        current_time = datetime.now().isoformat()
+        map_id = str(uuid.uuid4())  # Generate a unique ID
+        
+        new_map = {
+            "map_id": map_id,
+            "name": name,
+            "created_stamp": current_time,
+            "last_updated": current_time,
+            "center_point": {
+                "type": "Point",
+                "coordinates": [longitude if longitude else 0, latitude if latitude else 0]
+            },
+            "zoom_level": zoom_level
+        }
+        
+        # Add to in-memory storage
+        MAPS.append(new_map)
+        
+        return Response(new_map, status=status.HTTP_201_CREATED)
+    
+    def update(self, request, pk=None):
+        # Find the map with the given ID
+        for i, map_data in enumerate(MAPS):
+            if map_data['map_id'] == pk:
+                # Update fields that are provided
+                if 'name' in request.data:
+                    MAPS[i]['name'] = request.data['name']
+                
+                if 'latitude' in request.data and 'longitude' in request.data:
+                    MAPS[i]['center_point']['coordinates'] = [
+                        request.data['longitude'],
+                        request.data['latitude']
+                    ]
+                
+                if 'zoom_level' in request.data:
+                    MAPS[i]['zoom_level'] = request.data['zoom_level']
+                
+                # Update the last_updated timestamp
+                MAPS[i]['last_updated'] = datetime.now().isoformat()
+                
+                return Response(MAPS[i])
+        
+        # If no map is found, return 404
+        return Response({"error": "Map not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+    def destroy(self, request, pk=None):
+        # Find the map with the given ID
+        for i, map_data in enumerate(MAPS):
+            if map_data['map_id'] == pk:
+                # Remove the map from the list
+                removed_map = MAPS.pop(i)
+                return Response(status=status.HTTP_204_NO_CONTENT)
+        
+        # If no map is found, return 404
         return Response({"error": "Map not found"}, status=status.HTTP_404_NOT_FOUND)

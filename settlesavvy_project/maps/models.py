@@ -2,7 +2,7 @@
 
 import uuid
 from django.db import models
-from django.contrib.gis.db import models as gis_models
+# from django.contrib.gis.db import models as gis_models
 from django.utils import timezone
 from accounts.models import User
 
@@ -12,7 +12,9 @@ class Maps(models.Model):
     name = models.CharField(max_length=255)
     created_stamp = models.DateTimeField(default=timezone.now)
     last_updated = models.DateTimeField(auto_now=True)
-    center_point = gis_models.PointField(geography=True)
+    # center_point = gis_models.PointField(geography=True)
+    center_lat = models.FloatField(default=0.0)
+    center_lng = models.FloatField(default=0.0)
     zoom_level = models.FloatField()
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_maps')
 
@@ -32,7 +34,9 @@ class Geographies(models.Model):
     awater = models.BigIntegerField(default=0)
     intptlat = models.DecimalField(max_digits=9, decimal_places=7, default=0.0)
     intptlon = models.DecimalField(max_digits=10, decimal_places=7, default=0.0)
-    geometry = gis_models.MultiPolygonField(srid=4326)  # Explicitly set SRID and geometry type
+    # geometry = gis_models.MultiPolygonField(srid=4326)  # Explicitly set SRID and geometry type
+    geometry_json = models.TextField(null=True, blank=True)  # Store GeoJSON as text
+
 
     def __str__(self):
         return f"{self.name} ({self.geo_id})"
@@ -61,7 +65,10 @@ class PointOfInterest(models.Model):
     map = models.ForeignKey(Maps, on_delete=models.CASCADE, related_name='points_of_interest')
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
-    location = gis_models.PointField(geography=True)
+    # location = gis_models.PointField(geography=True)
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    address = models.CharField(max_length=255, blank=True, null=True)
     poi_type = models.CharField(max_length=50)  # e.g., work, school, family
     created_at = models.DateTimeField(auto_now_add=True)
     

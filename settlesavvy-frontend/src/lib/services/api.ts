@@ -1,26 +1,23 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// lib/services/api.ts
+// src/lib/services/api/index.ts
+import axios from 'axios';
+import { authService } from './api/auth-service';
+import { mapService } from './api/map-service';
 
-import axios from "axios";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/";
-
+// Create API client
 const apiClient = axios.create({
-  baseURL: API_URL,
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api',
+  timeout: 10000,
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to add auth token
+// Add request interceptor to add auth token
 apiClient.interceptors.request.use(
   (config) => {
-    // Check if we are in a browser environment
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      if (token) {
-        config.headers.Authorization = `Token ${token}`;
-      }
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Token ${token}`;
     }
     return config;
   },
@@ -29,72 +26,17 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Authentication services
-export const authService = {
-  login: async (username: string, password: string) => {
-    const response = await apiClient.post("auth/login/", { username, password });
-    if (response.data.token) {
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
+// Add response interceptor to handle auth errors
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      // Unauthorized - clear local auth data
+      authService.logout();
+      window.location.href = '/auth/login';
     }
-    return response.data;
-  },
-  logout: () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-  },
-  register: async (userData: any) => {
-    return apiClient.post("auth/register/", userData);
-  },
-  getCurrentUser: () => {
-    if (typeof window !== "undefined") {
-      const user = localStorage.getItem("user");
-      return user ? JSON.parse(user) : null;
-    }
-    return null;
-  },
-};
+    return Promise.reject(error);
+  }
+);
 
-// Maps services
-export const mapService = {
-  getAllMaps: () => apiClient.get("maps/"),
-  getMap: (id: string) => apiClient.get(`maps/${id}/`),
-  createMap: (mapData: any) => apiClient.post("maps/", mapData),
-  updateMap: (id: string, mapData: any) => apiClient.put(`maps/${id}/`, mapData),
-  deleteMap: (id: string) => apiClient.delete(`maps/${id}/`),
-  getMapScores: (id: string) => apiClient.get(`maps/${id}/factor_scores/`),
-};
-
-// Geography services
-export const geoService = {
-  getAllGeographies: () => apiClient.get("geographies/"),
-  getGeography: (id: string) => apiClient.get(`geographies/${id}/`),
-  getGeographiesByLocation: (lat: number, lng: number) => 
-    apiClient.get(`geographies/by_location/?lat=${lat}&lng=${lng}`),
-};
-
-// Factors services
-export const factorService = {
-  getAllFactors: () => apiClient.get("factors/"),
-  getFactor: (id: number) => apiClient.get(`factors/${id}/`),
-  getFactorsByCategory: (category: string) => apiClient.get(`factors/?category=${category}`),
-};
-
-// Map-Factor services
-export const mapFactorService = {
-  getMapFactors: (mapId: string) => apiClient.get(`map-factors/?map=${mapId}`),
-  createMapFactor: (mapFactorData: any) => apiClient.post("map-factors/", mapFactorData),
-  updateMapFactor: (id: string, mapFactorData: any) => apiClient.put(`map-factors/${id}/`, mapFactorData),
-  deleteMapFactor: (id: string) => apiClient.delete(`map-factors/${id}/`),
-  calculateScores: (id: string) => apiClient.post(`map-factors/${id}/calculate_scores/`),
-};
-
-// Points of Interest services
-export const poiService = {
-  getMapPOIs: (mapId: string) => apiClient.get(`points-of-interest/?map=${mapId}`),
-  createPOI: (poiData: any) => apiClient.post("points-of-interest/", poiData),
-  updatePOI: (id: string, poiData: any) => apiClient.put(`points-of-interest/${id}/`, poiData),
-  deletePOI: (id: string) => apiClient.delete(`points-of-interest/${id}/`),
-};
-
-export default apiClient;
+export { apiClient, authService, mapService };

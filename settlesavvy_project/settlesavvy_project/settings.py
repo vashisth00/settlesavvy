@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     
     # Third-party apps
     'rest_framework',
+    'rest_framework.authtoken',  # For token authentication
     'rest_framework_gis',  # For GIS API endpoints
     'corsheaders',
     'leaflet',  # For maps
@@ -147,4 +148,13 @@ LEAFLET_CONFIG = {
     'DEFAULT_ZOOM': 4,
     'MIN_ZOOM': 2,
     'MAX_ZOOM': 18,
+}
+
+# Spectacular settings for API documentation
+# drf-spectacular settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Settle Savvy API',
+    'DESCRIPTION': 'API for finding neighborhoods based on preferences',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }

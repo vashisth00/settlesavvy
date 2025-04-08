@@ -88,9 +88,11 @@ export default function DashboardPage() {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-3xl font-bold">Your Dashboard</h1>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Create New Map
+          <Button asChild>
+            <Link href="/maps/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Create New Map
+            </Link>
           </Button>
         </div>
 
@@ -110,9 +112,11 @@ export default function DashboardPage() {
                 <p className="mt-4 text-gray-500">You haven't created any maps yet.</p>
               </CardContent>
               <CardFooter className="justify-center">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First Map
+                <Button asChild>
+                  <Link href="/maps/new">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Your First Map
+                  </Link>
                 </Button>
               </CardFooter>
             </Card>
@@ -132,13 +136,17 @@ export default function DashboardPage() {
                     </p>
                   </CardContent>
                   <CardFooter className="flex justify-between">
-                    <Button variant="outline" size="sm">
-                      <Settings className="mr-2 h-4 w-4" />
-                      Edit
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/maps/${map.map_id}/edit`}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Edit
+                      </Link>
                     </Button>
-                    <Button size="sm">
-                      <Map className="mr-2 h-4 w-4" />
-                      View
+                    <Button size="sm" asChild>
+                      <Link href={`/maps/${map.map_id}`}>
+                        <Map className="mr-2 h-4 w-4" />
+                        View
+                      </Link>
                     </Button>
                   </CardFooter>
                 </Card>

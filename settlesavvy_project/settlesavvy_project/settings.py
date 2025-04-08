@@ -10,6 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+# settings.py
+
 import os
 from pathlib import Path
 import environ
@@ -53,21 +55,23 @@ INSTALLED_APPS = [
     'api',
 ]
 
-# Database Configuration
+# Database Configuration for Supabase
 DATABASES = {
     'default': {
-        'ENGINE': 'django.contrib.gis.db.backends.postgis',  # Using PostGIS for geographic data
-        'NAME': env('DB_NAME', default='settlesavvy'),
-        'USER': env('DB_USER', default='postgres'),
-        'PASSWORD': env('DB_PASSWORD', default='postgres'),
-        'HOST': env('DB_HOST', default='localhost'),
-        'PORT': env('DB_PORT', default='5432'),
+        'ENGINE': 'django.contrib.gis.db.backends.postgis', 
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'PASSWORD': env('DB_PASSWORD', default='Callsup@12345'),
+        'HOST': 'db.dfkuygfwrsewjjsrfryf.supabase.co',
+        'PORT': '5432',
     }
 }
 
-# GeoDjango settings
-GDAL_LIBRARY_PATH = env('GDAL_LIBRARY_PATH', default=None)
-GEOS_LIBRARY_PATH = env('GEOS_LIBRARY_PATH', default=None)
+# Add CORS settings to allow requests from your frontend
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",  # Next.js development server
+    "https://settlesavvy.com",  # Production domain (when you deploy)
+]
 
 # Rest Framework settings
 REST_FRAMEWORK = {

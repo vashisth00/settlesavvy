@@ -1,0 +1,8 @@
+settlesavvy-frontend/node_modules
+settlesavvy-frontend/.env
+
+
+settlesavvy_project/__pycache__/
+settlesavvy_project/*.pyc
+settlesavvy_project/*.pyo
+settlesavvy_project/*.pyd

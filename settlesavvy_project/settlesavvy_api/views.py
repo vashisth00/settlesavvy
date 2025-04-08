@@ -5,16 +5,18 @@ from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
+from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
+from django.contrib.gis.geos import Point
 import json
-import uuid
-from datetime import datetime
 
 from settlesavvy_accounts.models import User
-from .serializers import MapSerializer
-
-# In-memory storage for maps (temporary solution until we have a database model)
-MAPS = []
+from settlesavvy_core.models import Maps, Geographies, MapGeos, Factors, GeoFactors, MapFactors, MapFactorGeos
+from .serializers import (
+    MapSerializer, GeographySerializer, MapGeoSerializer, 
+    FactorSerializer, GeoFactorSerializer, MapFactorSerializer,
+    MapFactorGeoSerializer, NeighborhoodScoreSerializer
+)
 
 # Custom login view
 @api_view(['POST'])
@@ -97,90 +99,177 @@ def register_view(request):
         }
     }, status=status.HTTP_201_CREATED)
 
-# Updated MapViewSet that supports POST (create) operations and stores maps in memory
-class MapViewSet(viewsets.ViewSet):
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def debug_create_map(request):
     """
-    A ViewSet for listing, retrieving, and creating maps.
+    Debug view for map creation
     """
+    try:
+        # Extract data from request
+        data = request.data
+        name = data.get('name')
+        latitude = float(data.get('latitude', 0))
+        longitude = float(data.get('longitude', 0))
+        zoom_level = float(data.get('zoom_level', 10))
+        
+        # Debug output
+        print(f"Received data: {json.dumps(data, indent=2)}")
+        print(f"Name: {name}")
+        print(f"Lat: {latitude}, Lon: {longitude}")
+        print(f"Zoom: {zoom_level}")
+        
+        # Create Point object
+        center_point = Point(longitude, latitude, srid=4326)
+        print(f"Created Point: {center_point}")
+        
+        # Create map object directly
+        map_obj = Maps.objects.create(
+            name=name,
+            center_point=center_point,
+            zoom_level=zoom_level,
+            created_by=request.user
+        )
+        
+        # Return success
+        return Response({
+            'success': True,
+            'map_id': str(map_obj.map_id),
+            'name': map_obj.name,
+            'created_stamp': map_obj.created_stamp,
+            'center_point': {
+                'type': 'Point',
+                'coordinates': [longitude, latitude]
+            },
+            'zoom_level': map_obj.zoom_level
+        }, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        # Return error with details
+        print(f"Error creating map: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e),
+            'detail': "An error occurred while creating the map"
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+# ViewSets for models
+class MapViewSet(viewsets.ModelViewSet):
+    """ViewSet for Maps model"""
+    queryset = Maps.objects.all()
+    serializer_class = MapSerializer
     permission_classes = [permissions.IsAuthenticated]
     
-    def list(self, request):
-        # Return all maps from our in-memory storage
-        return Response(MAPS)
+    def get_queryset(self):
+        """Return maps for the current user or all maps if the user is staff"""
+        if self.request.user.is_staff:
+            return Maps.objects.all().order_by('-created_stamp')
+        return Maps.objects.filter(created_by=self.request.user).order_by('-created_stamp')
     
-    def retrieve(self, request, pk=None):
-        # Find the map with the given ID
-        for map_data in MAPS:
-            if map_data['map_id'] == pk:
-                return Response(map_data)
-        
-        # If no map is found, return 404
-        return Response({"error": "Map not found"}, status=status.HTTP_404_NOT_FOUND)
+    def get_serializer_context(self):
+        """Add request to serializer context"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
     
-    def create(self, request):
-        # Extract data from request
-        name = request.data.get('name')
-        latitude = request.data.get('latitude')
-        longitude = request.data.get('longitude')
-        zoom_level = request.data.get('zoom_level', 10)
+    @action(detail=True, methods=['get'])
+    def scores(self, request, pk=None):
+        """Get neighborhood scores for a map"""
+        map_obj = self.get_object()
         
-        # Validate required fields
-        if not name:
-            return Response({"error": "Map name is required"}, status=status.HTTP_400_BAD_REQUEST)
+        # Get all MapGeos for this map
+        map_geos = MapGeos.objects.filter(map=map_obj)
         
-        # Create a new map object
-        current_time = datetime.now().isoformat()
-        map_id = str(uuid.uuid4())  # Generate a unique ID
+        # Get all MapFactors for this map
+        map_factors = MapFactors.objects.filter(map=map_obj)
         
-        new_map = {
-            "map_id": map_id,
-            "name": name,
-            "created_stamp": current_time,
-            "last_updated": current_time,
-            "center_point": {
-                "type": "Point",
-                "coordinates": [longitude if longitude else 0, latitude if latitude else 0]
-            },
-            "zoom_level": zoom_level
-        }
+        # For each MapGeo, get scores from MapFactorGeos
+        results = []
         
-        # Add to in-memory storage
-        MAPS.append(new_map)
+        for map_geo in map_geos:
+            geo = map_geo.geo
+            
+            # Get score data
+            map_factor_geos = MapFactorGeos.objects.filter(map_geo=map_geo)
+            
+            # Calculate aggregate score for this neighborhood
+            total_score = 0
+            total_weight = 0
+            is_filtered = False
+            
+            for map_factor in map_factors:
+                try:
+                    # Try to find a specific score for this factor
+                    mfg = map_factor_geos.get(map_factor=map_factor)
+                    
+                    # Check if this geography is filtered out by this factor
+                    if map_factor.filter_strategy != 'no_filter':
+                        if (map_factor.filter_strategy == 'less_than' and 
+                            mfg.aggregate_score < map_factor.filter_tipping_1):
+                            is_filtered = True
+                            break
+                        elif (map_factor.filter_strategy == 'greater_than' and 
+                              mfg.aggregate_score > map_factor.filter_tipping_1):
+                            is_filtered = True
+                            break
+                        elif (map_factor.filter_strategy == 'between' and 
+                              (mfg.aggregate_score < map_factor.filter_tipping_1 or 
+                               mfg.aggregate_score > map_factor.filter_tipping_2)):
+                            is_filtered = True
+                            break
+                    
+                    # Add to weighted score
+                    total_score += mfg.aggregate_score * map_factor.weight
+                    total_weight += map_factor.weight
+                    
+                except MapFactorGeos.DoesNotExist:
+                    # Skip if no score for this factor
+                    continue
+            
+            # Calculate final score (0-100)
+            final_score = 0
+            if total_weight > 0:
+                final_score = min(100, max(0, round((total_score / total_weight) * 100)))
+            
+            # Add geometry data
+            results.append({
+                'geo_id': geo.geo_id,
+                'name': geo.name,
+                'score': final_score,
+                'is_filtered': is_filtered,
+                'geometry': json.loads(geo.geometry.json)
+            })
         
-        return Response(new_map, status=status.HTTP_201_CREATED)
+        # Serialize and return
+        serializer = NeighborhoodScoreSerializer(results, many=True)
+        return Response(serializer.data)
+
+class GeographyViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for Geographies model - read only"""
+    queryset = Geographies.objects.all()
+    serializer_class = GeographySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class FactorViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for Factors model - read only"""
+    queryset = Factors.objects.all()
+    serializer_class = FactorSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class MapFactorViewSet(viewsets.ModelViewSet):
+    """ViewSet for MapFactors model"""
+    queryset = MapFactors.objects.all()
+    serializer_class = MapFactorSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
-    def update(self, request, pk=None):
-        # Find the map with the given ID
-        for i, map_data in enumerate(MAPS):
-            if map_data['map_id'] == pk:
-                # Update fields that are provided
-                if 'name' in request.data:
-                    MAPS[i]['name'] = request.data['name']
-                
-                if 'latitude' in request.data and 'longitude' in request.data:
-                    MAPS[i]['center_point']['coordinates'] = [
-                        request.data['longitude'],
-                        request.data['latitude']
-                    ]
-                
-                if 'zoom_level' in request.data:
-                    MAPS[i]['zoom_level'] = request.data['zoom_level']
-                
-                # Update the last_updated timestamp
-                MAPS[i]['last_updated'] = datetime.now().isoformat()
-                
-                return Response(MAPS[i])
+    def get_queryset(self):
+        """Filter by map_id if provided"""
+        map_id = self.request.query_params.get('map_id')
+        if map_id:
+            return MapFactors.objects.filter(map__map_id=map_id)
         
-        # If no map is found, return 404
-        return Response({"error": "Map not found"}, status=status.HTTP_404_NOT_FOUND)
-    
-    def destroy(self, request, pk=None):
-        # Find the map with the given ID
-        for i, map_data in enumerate(MAPS):
-            if map_data['map_id'] == pk:
-                # Remove the map from the list
-                removed_map = MAPS.pop(i)
-                return Response(status=status.HTTP_204_NO_CONTENT)
+        # Only show factors for maps the user has created
+        if not self.request.user.is_staff:
+            return MapFactors.objects.filter(map__created_by=self.request.user)
         
-        # If no map is found, return 404
-        return Response({"error": "Map not found"}, status=status.HTTP_404_NOT_FOUND)
+        return MapFactors.objects.all()

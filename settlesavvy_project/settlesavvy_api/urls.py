@@ -7,13 +7,19 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, Sp
 from . import views
 
 router = DefaultRouter()
-# Register the MapViewSet
-router.register(r'maps', views.MapViewSet, basename='maps')
+# Register your viewsets with the router
+router.register(r'maps', views.MapViewSet)
+router.register(r'geographies', views.GeographyViewSet)
+router.register(r'factors', views.FactorViewSet)
+router.register(r'map-factors', views.MapFactorViewSet)
 
 urlpatterns = [
     # Authentication endpoints
     path('auth/login/', views.login_view, name='api_token_auth'),
     path('auth/register/', views.register_view, name='api_register'),
+    
+    # Debug endpoint
+    path('debug/create-map/', views.debug_create_map, name='debug_create_map'),
     
     # Include router URLs
     path('', include(router.urls)),

@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     # Custom apps
     'settlesavvy_accounts',
     'settlesavvy_maps',
+    'settlesavvy_core',
     'settlesavvy_factors',
     'settlesavvy_api',
 ]
